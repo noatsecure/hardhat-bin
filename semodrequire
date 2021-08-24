@@ -19,6 +19,12 @@ def usage():
 ### FUNCTIONS ###
 #################
 def args():
+    # Check if the user has specified the help flag (any argument)
+    if any([True for arg in argv if arg == '-h']):
+        # If so, then display the usage information
+        usage()
+        # Exit
+        exit(0)
     try:
         # Argument 1: Path to the SELinux module file
         filename = abspath(expanduser(argv[1]))
