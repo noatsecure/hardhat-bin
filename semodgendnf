@@ -163,9 +163,17 @@ class selinux:
     def __init__(self, package, bin_t, lib_t):
         # Ensure that at least one of the lists have entries
         self.valid(bin_t, lib_t)
-        # Generate the SELinux policy module directories and make them global variables so they can be returned
+        # Generate the SELinux policy module directory label for the binary package(s)
         self.bin_dir = self.generate(package, bin_t, f"{package}_bin_t", f"{package}_bin")
-        self.lib_dir = self.generate(package, lib_t, f"{package}_lib_t", f"{package}_lib")
+        # Check if the $package name ends with 'libs'
+        if package.endswith('libs'):
+            # If so, then the SELinux policy module label will simply add '_t' to the end of the package name to define the type label
+            libtypelabel = f"{package}_t"
+        else:
+            # Otherwise, add the specified string to the end of the $package name
+            libtypelabel = f"{package}_lib_t"
+        # Generate the SELinux policy module directory label for the library package(s)
+        self.lib_dir = self.generate(package, lib_t, libtypelabel, f"{package}_lib")
         
     def __call__(self):
         # Return the SELinux policy module directory
@@ -371,8 +379,15 @@ class edit:
         contents = [contents[0]]
         # Add all entries from $bin_t to the $contents list
         contents = self.add(bin_t, contents, cmd, f"{package}_bin_t")
+        # Check if the $package name ends with 'libs'
+        if package.endswith('libs'):
+            # If so, then the SELinux policy module label will simply add '_t' to the end of the package name to define the type label
+            libtypelabel = f"{package}_t"
+        else:
+            # Otherwise, add the specified string to the end of the $package name
+            libtypelabel = f"{package}_lib_t"
         # Add all entries from $lib_t to the $contents list
-        contents = self.add(lib_t, contents, cmd, f"{package}_lib_t")
+        contents = self.add(lib_t, contents, cmd, libtypelabel)
         # Overwrite $label_sh with the new $contents
         self.write(label_sh, contents)
 
