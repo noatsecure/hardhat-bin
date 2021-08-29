@@ -70,13 +70,13 @@ def classes(contents_allow):
     # Iterate through each class in $classes
     for c in classes:
         # For the current class, define only the permissions (eg. '{ create getattr read write }')
-        c_entries = [entry.split(c)[-1].strip() for entry in contents_allow if f":{c}" in entry]
-        # Iterate though each entry in $c_entries, and then only select the text that contains 'a-zA-Z ' (space at the end).
-        permissions = [search(r'[a-zA-Z_ ]+', entry) for entry in c_entries]
-        # Only use entries that are valid (eg. not Nonetype) and strip all extraneous spaces at the beginning and ending of the text. Then, join all entries via a space to create a single string. Next, split the string via the space delimiter, and then convert that list into a set in order to only keep unique entries
-        permissions = set(' '.join([p.group().strip() for p in permissions if p]).split(' '))
+        permissions = [perm for entry in contents_allow if f":{c}" in entry for perm in entry.split(f":{c}", 1)[-1].split(' ')]
+        # Iterate though each entry in $c_entries, and then only select the text that contains valid characters
+        permissions = [search(r'[a-zA-Z_ ]+', p) for p in permissions]
+        # Only use permissions that are valid (i.e. are not Nonetype) and sort the $permissions set
+        permissions = sorted(set([p.group().strip() for p in permissions if p]))
         # Define the proper format and add it to the $all_classes set
-        all_classes.add('class %s { %s };' % (c, ' '.join(sorted(permissions))))
+        all_classes.add('class %s { %s };' % (c, ' '.join(permissions)))
     # Join $all_classes via newline
     all_classes = '\n'.join(sorted(all_classes))
     # Return the $all_classes set
