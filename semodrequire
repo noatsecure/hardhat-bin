@@ -109,10 +109,10 @@ def types(contents_allow):
     types = set()
     # Iterate through each entry in the $contents_allow list
     for entry in contents_allow:
-        # The first part of the entry will be the type, and the last part will be the class
-        name = entry.split(':')[0].split(' ')[-1]
-        # Define only the type since it will contain the 'allow name_t type' string, where we only want 'type'
-        types.add(name)
+        # The first part of the entry will be the type, and the last part will be the class. Keep only the part with the type (eg. 'allow test_t named_t') and then split this via spaces (eg. ['allow', 'test_t', 'named_t'])
+        entry_s = entry.split(':')[0].split(' ')
+        # For every entry in $entry_s that ends with the string '_t', add to the $types set
+        [types.add(t) for t in entry_s if t.endswith('_t')]
     # For each type in $types, except for 'self' that isn't a proper type, create the string 'type $name;' where $name is the current entry. Finally, join the entire list via the newline delimiter 
     types = '\n'.join([f"type {t};" for t in sorted(types) if t not in ('self')])
     # Return the string containing all types
