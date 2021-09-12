@@ -2,7 +2,6 @@
 from importlib.machinery import SourceFileLoader
 from importlib.util import module_from_spec,spec_from_loader
 from pathlib import Path,PurePath
-from selinux import getfilecon
 from subprocess import run
 from sys import argv,exit
 
@@ -85,7 +84,7 @@ class contents:
         # List of all binaries within $package that are labeled as 'bin_t', a generic label
         self.bin_t = self.generic(raw, ('/bin', '/sbin', '/usr/bin', '/usr/sbin'), 'bin_t')
         # List of all binaries within $package that are labeled as 'lib_t', a generic label
-        lib_t = self.generic(raw, ('/usr/lib'), 'lib_t')
+        lib_t = self.generic(raw, ('/lib', '/lib64', '/usr/lib'), 'lib_t')
         # Filter the $lib_t list
         self.lib_t = self.lib(lib_t)
 
