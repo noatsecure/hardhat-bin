@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 from importlib.machinery import SourceFileLoader
 from importlib.util import module_from_spec,spec_from_loader
-from os import listdir,mkdir
-from os.path import abspath,basename,dirname,expanduser,isfile,join,realpath
-from shutil import copytree,rmtree
+from pathlib import Path,PurePath
 from selinux import getfilecon
 from subprocess import run
 from sys import argv,exit
@@ -13,7 +11,7 @@ from sys import argv,exit
 ######################
 def custom_module(filename):
     # Define the name based on the filename
-    name = basename(filename)
+    name = PurePath(filename).name
     # Create $spec that is used to load the module
     spec = spec_from_loader(name, SourceFileLoader(name, filename))
     # Define the module
@@ -27,7 +25,7 @@ def custom_module(filename):
 #-- SEINFOX --#
 #-------------#
 # Since the `seinfox` module does not have the '.py' extension, it needs to be loaded in a more complicated way
-seinfox = custom_module(join(dirname(argv[0]), 'seinfox'))
+seinfox = custom_module(PurePath(Path(argv[0]).resolve().parent).joinpath('seinfox').as_posix())
 
 # Define the contexts function as $contexts
 contexts = seinfox.contexts
@@ -36,7 +34,7 @@ contexts = seinfox.contexts
 #-- SEMODGENAUTO --#
 #------------------#
 # Load the `semodgenauto` python script
-semodgenauto = custom_module(join(dirname(argv[0]), 'semodgenauto'))
+semodgenauto = custom_module(PurePath(Path(argv[0]).resolve().parent).joinpath('semodgenauto').as_posix())
 
 # Define the main function as $semodgenauto
 semodgenauto = semodgenauto.main
@@ -45,7 +43,7 @@ semodgenauto = semodgenauto.main
 ### USAGE ###
 #############
 def usage():
-    name = basename(argv[0])
+    name = PurePath(argv[0]).name
     print(f"NAME\n\t{name} - python script to automatically generate a SELinux policy module for all binaries and libraries within the specified package\n")
     print(f"SYNOPSIS\n\t{name} package_name /path/to/output_dir/\n")
     print(f"DESCRIPTION\n\t{name} is a Python script provided by the HardHat project that automatically generates a single SELinux policy module (label only) for all of the binaries within the package labelled as 'bin_t', and all of the libraries within the package labelled as 'lib_t'. The label will be based on the package's name, eg. Binaries within the 'coreutils' package will have the label 'coreutils_bin_t', and the libraries will be labelled 'coreutils_lib_t'.\n\n\tArgument 2 is optional, and it specifies the directory to output the SELinux policy module directory to. By default, this is set to: '/usr/local/share/hardhat-selinux-local'\n")
@@ -73,10 +71,10 @@ def args():
         exit(1)
     # Define the directory where the SELinux policy module directory will be created in
     try:
-        outdir = expanduser(argv[2])
+        outdir = Path(argv[2]).expanduser()
     except IndexError:
         # Default output directory
-        outdir = expanduser('/usr/local/share/hardhat-selinux-local')
+        outdir = Path('/usr/local/share/hardhat-selinux-local').expanduser()
     # Return the arguments passed by the user
     return(package, outdir)
 
@@ -112,7 +110,7 @@ class contents:
     def symlink(self, entry):
         try:
             # If $entry is a symlink, then obtain the full path to the real file
-            entry = realpath(entry)
+            entry = Path(entry).resolve().as_posix()
         except OSError:
             # Otherwise, $entry is not a symlink, so do nothing
             pass
@@ -164,7 +162,7 @@ class selinux:
         # Ensure that at least one of the lists have entries
         self.valid(bin_t, lib_t)
         # Generate the SELinux policy module directory label for the binary package(s)
-        self.bin_dir = self.generate(package, bin_t, f"{package}_bin_t", f"{package}_bin")
+        [self.bin_te, self.bin_label] = self.generate(package, bin_t, f"{package}_bin_t", f"{package}_bin")
         # Check if the $package name ends with 'libs'
         if package.endswith('libs'):
             # If so, then the SELinux policy module label will simply add '_t' to the end of the package name to define the type label
@@ -173,11 +171,11 @@ class selinux:
             # Otherwise, add the specified string to the end of the $package name
             libtypelabel = f"{package}_lib_t"
         # Generate the SELinux policy module directory label for the library package(s)
-        self.lib_dir = self.generate(package, lib_t, libtypelabel, f"{package}_lib")
-        
+        [self.lib_te, self.lib_label] = self.generate(package, lib_t, libtypelabel, f"{package}_lib")
+
     def __call__(self):
         # Return the SELinux policy module directory
-        return(self.bin_dir, self.lib_dir)
+        return(self.bin_te, self.bin_label, self.lib_te, self.lib_label)
 
     def valid(self, bin_t, lib_t):
         # Check if both $bin_t and $lib_t are False
@@ -193,26 +191,14 @@ class selinux:
             type_t = type_t[0]
         except TypeError:
             # If $type_t is False, then return
-            return(False)
-        # Define the full path to the SELinux policy module directory
-        selinux_dir = join('/tmp', dirname)
-        try:
-            # Remove $selinux_dir if it already exists
-            rmtree(selinux_dir)
-        except FileNotFoundError:
-            # If $selinux_dir doesn't exist, then do nothing
-            pass
+            return(False, False)
         # Create a SELinux policy module directory in /tmp just for $type_t. The label.sh file will be edited to specify the rest of the $bin_t list as well as the $lib_t list too
-        semodgenauto(type_t, '/tmp', label, dirname)
+        [te, label] = semodgenauto(type_t, False, label, dirname)
         # Return the directory
-        return(selinux_dir)
+        return([te, label])
 
 class merge:
-    def __init__(self, package, bin_dir, lib_dir):
-        # Obtain the contents of the label.sh and te file from $bin_dir
-        [bin_label, bin_te] = self.contents(bin_dir)
-        # Obtain the contents of the label.sh and te file from $lib_dir
-        [lib_label, lib_te] = self.contents(lib_dir)
+    def __init__(self, package, bin_te, bin_label, lib_te, lib_label):
         # Merge the contents of $bin_label and $lib_label
         self.label = self.labels([bin_label, lib_label])
         # Merge the contents of $bin_te and $lib_te
@@ -221,35 +207,7 @@ class merge:
     def __call__(self):
         # Return the merged label and te file contents
         return(self.label, self.te, self.module)
-
-    def read(self, filename):
-        try:
-            # Open $filename and return its contents
-            with open(filename, 'r') as f: return(f.readlines())
-        except FileNotFoundError:
-            # If $filename does not exist, then return False
-            return(False)
-
-    def contents(self, directory):
-        try:
-            # Obtain the contents of the 'label.sh' file for the current SELinux policy module directory
-            label = self.read(join(directory, 'label.sh'))
-        except TypeError:
-            # If a TypeError is raised, then $directory is False, meaning there were no files associated with $directory (which is either $bin_t or $lib_t). So return False for both the label and te file contents
-            return(False, False)
-        # Obtain the first (and only) te file within $directory
-        te = [join(directory, f) for f in listdir(directory) if f.endswith('.te')][0]
-        # Obtain the contents of the SELinux policy module file
-        te = self.read(te)
-        # Check if $te is False, meaning the file was not found in $directory
-        if te is False:
-            # If so, then display an error message to user
-            print(f"ERROR: Unable to find the SELinux '.te' file within: '{directory}'")
-            # Exit with an error
-            exit(1)
-        # Return the contents for the label and te file within $directory
-        return(label, te)
-
+ 
     def labels(self, all_lst):
         # Define the output list
         label = []
@@ -315,14 +273,6 @@ class merge:
         # Return $te
         return(te, module)
 
-def rm(directory):
-    try:
-        # Remove $directory
-        rmtree(directory)
-    except TypeError:
-        # If $directory is False, then do nothing
-        pass
-
 class create:
     def __init__(self, label, te, module, outdir):
         # Create the SELinux policy module directory in $outdir
@@ -340,10 +290,10 @@ class create:
 
     def makedir(self, module, outdir):
         # Define the SELinux policy module directory
-        directory = join(outdir, module)
+        directory = PurePath(outdir).joinpath(module)
         try:
             # Create the directory
-            mkdir(directory)
+            Path(directory).mkdir()
         except FileExistsError:
             # If the directory already exists, then do nothing
             pass
@@ -368,9 +318,9 @@ class create:
 
     def write(self, directory, contents, filename):
         # Define the full path to the $filename 
-        filename = join(directory, filename)
+        filename = PurePath(directory).joinpath(filename).as_posix()
         # Check if the $filename is for the label.sh shell script and is also an existing file
-        if filename.endswith('label.sh') and isfile(filename):
+        if filename.endswith('label.sh') and Path(filename).is_file():
             # If $filename exists, then obtain the original contents
             with open(filename, 'r') as f: orig_contents = f.readlines()
             # Merge the existing contents with the original contents
@@ -400,7 +350,7 @@ class edit:
 
     def label(self, directory, bin_t, lib_t):
         # Define the full path to the 'label.sh' shell script to edit
-        label_sh = join(directory, 'label.sh')
+        label_sh = PurePath(directory).joinpath('label.sh')
         try:
             # Open the $label_sh and obtain its existing contents
             with open(label_sh, 'r') as f: contents = f.readlines()
@@ -465,12 +415,9 @@ def main(package, outdir):
     # Obtain the list of binaries ($bin_t) and libraries ($lib_t) to create labels for
     [bin_t, lib_t] = contents(package)()
     # Use the `semodgenauto` script to create SELinux policy module directories for $bin_t and $lib_t, which are the return variables
-    [bin_dir, lib_dir] = selinux(package, bin_t, lib_t)()
-    # Merge the files within the directories into one
-    [label, te, module] = merge(package, bin_dir, lib_dir)()
-    # Remove the temporary directories
-    rm(bin_dir)
-    rm(lib_dir)
+    [bin_te, bin_label, lib_te, lib_label] = selinux(package, bin_t, lib_t)()
+    # Merge the contents from bin_t files and lib_t types (te and label.sh)
+    [label, te, module] = merge(package, bin_te, bin_label, lib_te, lib_label)()
     # Create the output SELinux policy module directory
     directory = create(label, te, module, outdir)()
     # Edit the shell script that defines the SELinux labelling to include all entries within $bin_t and $lib_t
