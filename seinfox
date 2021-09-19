@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from os.path import abspath,basename,expanduser,exists
-from selinux import getfilecon
+from selinux import lgetfilecon
 from subprocess import run
 from sys import argv,exit
 
@@ -62,7 +62,7 @@ def options(flag):
 def contexts(target):
     try:
         # Obtain the SELinux contexts for $target, which will provide the user, role, and type for $target as the last entry in the output list
-        contexts = getfilecon(target)[-1]
+        contexts = lgetfilecon(target)[-1]
     except FileNotFoundError:
         # If $target is not a valid file or directory, then display an error message to user
         raise FileNotFoundError(f"ERROR: Unable to locate the specified file or directory: '{target}'")

@@ -163,7 +163,7 @@ class selinux:
         # Generate the SELinux policy module directory label for the binary package(s)
         [self.bin_te, self.bin_label] = self.generate(package, bin_t, f"{package}_bin_t", f"{package}_bin")
         # Check if the $package name ends with 'libs'
-        if package.endswith('libs'):
+        if package.endswith(('lib', 'libs')):
             # If so, then the SELinux policy module label will simply add '_t' to the end of the package name to define the type label
             libtypelabel = f"{package}_t"
         else:
@@ -191,7 +191,7 @@ class selinux:
         except TypeError:
             # If $type_t is False, then return
             return(False, False)
-        # Create a SELinux policy module directory in /tmp just for $type_t. The label.sh file will be edited to specify the rest of the $bin_t list as well as the $lib_t list too
+        # Create a SELinux policy module and label for $type_t
         [te, label] = semodgenauto(type_t, False, label, dirname)
         # Return the directory
         return([te, label])
@@ -318,12 +318,30 @@ class create:
     def write(self, directory, contents, filename):
         # Define the full path to the $filename 
         filename = PurePath(directory).joinpath(filename).as_posix()
-        # Check if the $filename is for the label.sh shell script and is also an existing file
-        if filename.endswith('label.sh') and Path(filename).is_file():
-            # If $filename exists, then obtain the original contents
+        # Check if $filename is an existing file
+        if Path(filename).is_file():
+            # If so, then obtain its contents
             with open(filename, 'r') as f: orig_contents = f.readlines()
-            # Merge the existing contents with the original contents
-            contents = [contents[0]] + sorted(set(orig_contents[1:] + contents[1:]))
+        if filename.endswith('label.sh'):
+            try:
+                # Merge the existing contents with the original contents
+                contents = [contents[0]] + sorted(set(orig_contents[1:] + contents[1:]))
+            except NameError:
+                pass
+        elif filename.endswith('.te'):
+            contents = [entry for entry in contents.split('\n') if entry]
+            index = [contents.index(entry) for entry in contents if entry.startswith('type')][0]
+            orig = [entry for entry in orig_contents if entry.startswith('type')]
+            types = contents[index] + orig
+            print(types)
+            exit(0) 
+            contents.insert(index, orig)
+            print('\n'.join(contents))
+            #contents[-1] = orig_type[0]
+            #contents = contents + [separator]
+            #print('\n'.join(contents))
+            exit(0) 
+             
         # Write the $contents to $filename
         with open(filename, 'w') as f: f.write(''.join(contents))
 
@@ -394,8 +412,9 @@ class edit:
             return(contents)
         # Change the existing ${package}_t label to either ${package}_bin_t for binaries or ${package}_lib_t for libraries
         gen_t_contents = [entry.replace(curr_label, label) for entry in gen_t_contents]
-        # Change the path of '/usr/lib64' to '/usr/lib' if applicable
+        # Change the path of any 'lib64' path to '/usr/lib' if applicable
         gen_t_contents = [entry.replace('/usr/lib64', '/usr/lib') for entry in gen_t_contents]
+        gen_t_contents = [entry.replace('/lib64', '/usr/lib') for entry in gen_t_contents]
         # Add $gen_t_contents to the existing $contents list
         contents = contents + gen_t_contents
         # Remove duplicates from everything but the first line, which is the shebang
