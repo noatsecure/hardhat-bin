@@ -1,0 +1,188 @@
+#!/usr/bin/env python
+from importlib.machinery import SourceFileLoader
+from importlib.util import module_from_spec,spec_from_loader
+from pathlib import Path,PurePath
+from re import sub
+from subprocess import run
+from sys import argv
+
+######################
+### CUSTOM MODULES ###
+######################
+def custom_module(filename):
+    # Define the name based on the filename
+    name = PurePath(filename).name
+    # Create $spec that is used to load the module
+    spec = spec_from_loader(name, SourceFileLoader(name, filename))
+    # Define the module
+    mod = module_from_spec(spec)
+    # Load the module based on $spec
+    spec.loader.exec_module(mod)
+    # Return the module object
+    return(mod)
+
+#-------------#
+#-- SEINFOX --#
+#-------------#
+# Since the `seinfox` module does not have the '.py' extension, it needs to be loaded in a more complicated way
+seinfox = custom_module(PurePath(Path(argv[0]).resolve().parent).joinpath('seinfox').as_posix())
+
+# Define the contexts function as $contexts
+contexts = seinfox.contexts
+
+#------------------#
+#-- SEMODGENAUTO --#
+#------------------#
+# Load the `semodgenauto` python script
+semodgenauto = custom_module(PurePath(Path(argv[0]).resolve().parent).joinpath('semodgenauto').as_posix())
+
+# Define the main function as $semodgenauto
+semodgenauto = semodgenauto.main
+
+#############
+### USAGE ###
+#############
+def usage():
+    name = PurePath(argv[0]).name
+    print(f"NAME\n\t{name} - python script to automatically generate a SELinux policy module for all binaries and libraries within the specified package\n")
+    print(f"SYNOPSIS\n\t{name} package_name /path/to/output_dir/\n")
+    print(f"DESCRIPTION\n\t{name} is a Python script provided by the HardHat project that automatically generates a single SELinux policy module (label only) for all of the binaries within the package labelled as 'bin_t', and all of the libraries within the package labelled as 'lib_t'. The label will be based on the package's name, eg. Binaries within the 'coreutils' package will have the label 'coreutils_bin_t', and the libraries will be labelled 'coreutils_lib_t'.\n\n\tArgument 2 is optional, and it specifies the directory to output the SELinux policy module directory to. By default, this is set to: '/usr/local/share/hardhat-selinux-local'\n")
+    print(f"EXAMPLE\n\t1. {name} coreutils\n\n\t2. {name} gzip /home/user/selinux-labels\n")
+    print("\n")
+
+#################
+### FUNCTIONS ###
+#################
+def error(msg):
+    # Display error message to user
+    print(f"ERROR: {msg}")
+    # Exit with an error
+    exit(1)
+
+def warn(msg):
+    # Display warning message to user
+    print(f"WARN: {msg}")
+
+def args():
+    # Check if the user has specified the help flag (any argument)
+    if any([True for arg in argv if arg == '-h']):
+        # If so, then display the usage information
+        usage()
+        # Exit
+        exit(0)
+    try:
+        # Argument 1: Name of the package
+        package = argv[1]
+    except IndexError:
+        # If not specified, then display an error message and exit
+        error("Argument 1: Name of the package.")
+    try:
+        # Argument 2 (Optional): Output directory
+        outdir = Path(argv[2]).expanduser()
+    except IndexError:
+        # Default output directory
+        outdir = Path('/usr/local/share/hardhat-selinux-local').expanduser() 
+    return(package, outdir)
+
+def rpm(package):
+    # Execute the rpm command to list all files and directories associated with $package
+    cmd = run(['/usr/bin/rpm', '--list', '--query', package], capture_output = True)
+    # If the command failed, most likely due to the $package not existing, then exit with an error
+    if cmd.returncode != 0: error(f"Invalid package: '{package}'")
+    # The output will be a string, so convert it into a list and return
+    return(cmd.stdout.decode().split('\n'))
+
+def parse(stdout):
+    # Remove empty and duplicate entries
+    lst = set([entry.strip() for entry in stdout if entry])
+    # Remove all entries that start with the specified string
+    lst = [entry for entry in lst if not entry.startswith('/usr/lib/.build-id')]
+    # Define a set that contains entries within $lst that will be removed
+    rmlst = set()
+    # Iterate through each entry within $lst and identifies all another entries that start with the current one. For example, if the current $entry is '/etc/package', then the $other_entry '/etc/package/file1.txt' and the $other_entry '/etc/package/directory1' will both be added to the $rmlst set
+    for entry in lst: set([rmlst.add(other_entry) for other_entry in lst if (not entry == other_entry) and (other_entry.startswith(entry))])
+    # Keep only entries that are no in $rmlst
+    lst = sorted([entry for entry in lst if entry not in rmlst]) 
+    # Return $lst
+    return(lst)
+
+def custom_labels(package):
+    # Create a dictionary to hold the custom labels as keys and a tuple of their associated directories as the value
+    labels = dict()
+    # Use the package name to define the following labels
+    labels[f"{package}_bin_t"] = ('/bin', '/usr/bin')
+    labels[f"{package}_etc_t"] = ('/etc')
+    labels[f"{package}_sbin_t"] = ('/sbin', '/usr/sbin')
+    # The custom label for the library directories are dependent on the package name. Normally the label for these directories will be: $name_libs_t, but for packages like 'openssl-libs' for example, the label looks redundant: 'openssl-libs_lib_t'. So to mediate this the associated directories are first defined
+    lib_labels = ('/lib', '/lib64', '/usr/lib', '/usr/lib64')
+    # Next, check if the $package name ends with either string
+    if package.endswith(('-lib', '-libs')):
+        # If so, then do not include the '_lib_t'. Eg. the label for 'openssl-libs' is 'openssl-libs_t' instead of the messy 'openssl-libs_lib_t'
+        labels[f"{package}_t"] = lib_labels
+    else:
+        # Otherwise, add the 'lib_t' string. Eg. the label for 'gzip' is 'gzip_lib_t'
+        labels[f"{package}_lib_t"] = lib_labels
+    # Return the $labels dictionary
+    return(labels)
+ 
+def default_labels(lst):
+    defaults = dict()
+    # Iterate through all nested lists within $lst
+    for entry in lst:
+        try:
+            # Obtain the current SELinux label for $entry
+            [_, _, label] = contexts(entry)
+        except PermissionError:
+            # If the specified path is not accessible by the user that executed this script, then display a warning message to user
+            warn(f"Unable to obtain the SELinux context for the following entry due to a permission error. You may need to run this script as root: '{entry}'")
+            # Set $label to False
+            label = False
+        except FileNotFoundError:
+            # If $entry is not a valid file, then display a warning message to user
+            warn(f"The following entry is not a valid file. This error occurs when a package's symlink is to a non-existent file and is often harmless: '{entry}'")
+            # Set $label to False
+            label = False
+        defaults[entry] = label
+    return(defaults)
+ 
+def regex(entry):
+    # Use regex to ensure the labels for libraries are not version specific. For example, a generic 'libtest.so' will generally be a symlink to 'libtest.so.1.1.1', a specific version. This replacement converts 'libtest.so' --> 'libtest.so(.*)?' and 'libtest.so.1.1.1' --> 'libtest.so(.*)?'. They are now both the same so future updates to this library are covered
+    entry = sub(r'.so.[a-zA-Z0-9].+$', '.so(.*)?', entry)
+    # For directories include all files within the directory by adding '(.*)?' to the end of the directory name
+    if Path(entry).is_dir(): entry = f"{entry}(.*)?" 
+    # SELinux doesn't handle '/lib64' and '/usr/lib64', so they will need to be converted to '/usr/lib'
+    entry = sub(r'(/lib64|/usr/lib64)', '/usr/lib', entry)
+    # Return the current $entry
+    return(entry)
+
+############
+### MAIN ###
+############
+def main(package, outdir):
+    # Obtain a list of all files and directories associated with $package
+    stdout = rpm(package)
+    # Clean the $stdout list to keep only valid entries
+    lst = parse(stdout)
+    # Define custom SELinux labels that will be used for each file and directory
+    custom = custom_labels(package)
+    # Obtain the default SELinux labels for each file and directory
+    defaults = default_labels(lst)
+    # Add the default and custom labels to create a list of lists in the format of: [['/path/to/file', 'default label', 'custom label'], ...]
+    lst = [[entry, defaults[entry], key] for entry in lst for key in custom if entry.startswith(custom[key]) and defaults[entry]]
+    # Utilize regular expressions to ensure libraries and directories are properly covered
+    for nst_lst in lst: nst_lst[0] = regex(nst_lst[0])
+    # 
+    #
+    for nst_lst in lst:
+         if nst_lst[1] == nst_lst[2]: nst_lst[1] = False
+    for x in lst: print(x)
+
+#############
+### START ###
+#############
+if __name__ == '__main__':
+    # Arguments
+    [package, outdir] = args()
+    # Execute the main script
+    main(package, outdir)
+
