@@ -144,7 +144,7 @@ def default_labels(lst):
             label = False
         defaults[entry] = label
     return(defaults)
- 
+
 def regex(entry):
     # Use regex to ensure the labels for libraries are not version specific. For example, a generic 'libtest.so' will generally be a symlink to 'libtest.so.1.1.1', a specific version. This replacement converts 'libtest.so' --> 'libtest.so(.*)?' and 'libtest.so.1.1.1' --> 'libtest.so(.*)?'. They are now both the same so future updates to this library are covered
     entry = sub(r'.so.[a-zA-Z0-9].+$', '.so(.*)?', entry)
@@ -169,13 +169,22 @@ def main(package, outdir):
     defaults = default_labels(lst)
     # Add the default and custom labels to create a list of lists in the format of: [['/path/to/file', 'default label', 'custom label'], ...]
     lst = [[entry, defaults[entry], key] for entry in lst for key in custom if entry.startswith(custom[key]) and defaults[entry]]
+    # Generate the SELinux .te and label.sh shell scripts for each file and directory in $lst
+    defaults_uniq = set([nst_lst[1] for nst_lst in lst])
+    for entry in defaults_uniq:
+        print(f"CURRENT: {entry}")
+        try:
+            value = custom[entry][0]
+        except KeyError:
+            continue
+        value = f"{PurePath(value).name}_t"
+        semodgenauto(
+        print(value)
+    exit()
+    #nst_lst.append(semodgenauto(nst_lst[0], False, nst_lst[2], nst_lst[1]))
     # Utilize regular expressions to ensure libraries and directories are properly covered
-    for nst_lst in lst: nst_lst[0] = regex(nst_lst[0])
-    # 
-    #
-    for nst_lst in lst:
-         if nst_lst[1] == nst_lst[2]: nst_lst[1] = False
-    for x in lst: print(x)
+    #for nst_lst in lst: nst_lst[0] = regex(nst_lst[0])
+    #for x in lst: print(x)
 
 #############
 ### START ###
@@ -185,4 +194,3 @@ if __name__ == '__main__':
     [package, outdir] = args()
     # Execute the main script
     main(package, outdir)
-
