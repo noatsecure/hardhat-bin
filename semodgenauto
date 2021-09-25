@@ -17,6 +17,12 @@ spec = spec_from_loader('seinfox', SourceFileLoader('seinfox', path_seinfox))
 seinfox = module_from_spec(spec)
 spec.loader.exec_module(seinfox)
 
+# Load the function that obtains the raw attributes for the given type
+description = seinfox.description
+
+# Load the function that parses the attributes obtained from the `description` function and removes aliases
+ignore_alias = seinfox.ignore_alias
+
 # Define the main function as $seinfox
 seinfox = seinfox.main
 
@@ -39,7 +45,7 @@ def usage():
     print(f"NAME\n\t{name} - python script to automatically generate a SELinux policy module for the specified file/directory\n")
     print(f"SYNOPSIS\n\t{name} /path/to/file_or_dir [OPTIONS]\n")
     print(f"DESCRIPTION\n\t{name} is a Python script provided by the HardHat project that automatically generates a SELinux policy module (label only) for the specified file/directory.\n")
-    print(f"OPTIONS\n\t-d\tDirectory to output the generated SELinux policy module directory\n\t-h\tDisplay this message\n\t-l\tCustom label to use\n\t-n\tName of the SELinux policy module directory to create\n")
+    print(f"OPTIONS\n\t-d\tDirectory to output the generated SELinux policy module directory\n\t-h\tDisplay this message\n\t-l\tCustom label to use\n\t-n\tName of the SELinux policy module directory to create\n\t-t\tSpecific SELinux type to use for the module attributes (eg. 'bin_t')\n")
     print(f"EXAMPLE\n\t1. {name} /usr/bin/cat\n\n\t2. {name} /usr/bin/cat -d /home/user/selinux\n\n\t3. {name} /usr/bin/cat -l custom_label_t\n\n\t4. {name} /usr/bin/cat -d ~/output_dir -l custom_label_t\n\n\t5. {name} /usr/bin/cat -d /tmp -l label_t -n cat_label_dir\n")
     print("\n")
 
@@ -75,12 +81,18 @@ def args():
     #------------------#
     # Optional Flag: Custom label to use for the SELinux policy module
     label = options('-l')
-    #----------#
-    #-- NAME --#
-    #----------#
+    #-----------------#
+    #-- MODULE NAME --#
+    #-----------------#
+    # Optional Flag: Custom name to use for the SELinux policy module name
     name = options('-n')
+    #-----------------#
+    #-- MODULE TYPE --#
+    #-----------------#
+    # Optional Flag: Specify the SELinux type (eg. 'bin_t' for the module attributes
+    modtype = options('-t')
     # Return the arguments
-    return(target, outdir, label, name)
+    return(target, outdir, label, name, modtype)
 
 def options(flag):
     try:
@@ -211,13 +223,15 @@ class write:
 ############
 ### MAIN ###
 ############
-def main(target, outdir, label, name):
+def main(target, outdir, label, name, modtype):
     # Verify $target is a valid file or directory
     is_exists(target) 
     # Verify $outdir is a valid directory (if $outdir is not False)
     if outdir: is_exists(outdir)
     # Obtain the attributes of the current type associated with $target
     [_, _, attributes] = seinfox(target, False, False, True)
+    # If a specific module type has been specified for the module's attributes
+    if modtype is not False: attributes = ignore_alias(description(modtype, True))
     # Join the attributes to create a string
     attributes = ' '.join(attributes)
     # Perform SELinux specific changes to $target and remove its path 
@@ -251,6 +265,6 @@ if __name__ == '__main__':
     # Verify the $seinfo binary exists, used to obtain the attributes of SELinux types
     is_exists(seinfo)
     # Parse user-specified arguments
-    [target, outdir, label, name] = args()
+    [target, outdir, label, name, modtype] = args()
     # Execute the main script
-    main(target, outdir, label, name)
+    main(target, outdir, label, name, modtype)
