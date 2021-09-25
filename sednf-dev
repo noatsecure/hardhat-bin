@@ -2,7 +2,7 @@
 from importlib.machinery import SourceFileLoader
 from importlib.util import module_from_spec,spec_from_loader
 from pathlib import Path,PurePath
-from re import sub
+from re import search,sub
 from subprocess import run
 from sys import argv
 
@@ -155,6 +155,33 @@ def regex(entry):
     # Return the current $entry
     return(entry)
 
+def default_types(lst, custom):
+    # Create a set containing all default types within $lst
+    defaults_uniq = set([nst_lst[1] for nst_lst in lst])
+    # Iterate through each entry within $defaults_uniq
+    for entry in defaults_uniq:
+        try:
+            # Check if $entry was found in the $custom dictionary, containing the custom labels for the current $package
+            custom[entry]
+        except KeyError:
+            # If $entry is a generic (eg. 'bin_t', 'lib_t'), then continue to the next $entry
+            continue
+        try:
+            # Using regular expressions, obtain the default label. Eg. 'test_lib_t' = 'lib_t', and 'test_bin_t' = 'bin_t', etc.
+            default_type = search(r'(?<=-|_)[\w]+_t$', entry).group()
+        except AttributeError:
+            error(f"Unable to determine default type (eg. 'bin_t', 'lib_t') for the custom label: '{entry}'")
+        # All of the sbin related directories use the SELinux label 'bin_t'
+        if default_type == 'sbin_t': default_type = 'bin_t'
+        # For package names ending with 'libs_t', correct the label to be 'lib_t'
+        if default_type == 'libs_t': default_type = 'lib_t'
+        # Iterate through the nested lists within $lst
+        for nst_lst in lst:
+            # If the default type is $entry, then change it to $default_type
+            if nst_lst[1] == entry: nst_lst[1] = default_type
+    # Return $lst
+    return(lst)
+
 ############
 ### MAIN ###
 ############
@@ -169,18 +196,9 @@ def main(package, outdir):
     defaults = default_labels(lst)
     # Add the default and custom labels to create a list of lists in the format of: [['/path/to/file', 'default label', 'custom label'], ...]
     lst = [[entry, defaults[entry], key] for entry in lst for key in custom if entry.startswith(custom[key]) and defaults[entry]]
+    # If the default types for any of the nested lists within $lst are a custom label (eg. 'openssl-libs_t' instead of 'lib_t'), then fix it
+    lst = default_types(lst, custom)
     # Generate the SELinux .te and label.sh shell scripts for each file and directory in $lst
-    defaults_uniq = set([nst_lst[1] for nst_lst in lst])
-    for entry in defaults_uniq:
-        print(f"CURRENT: {entry}")
-        try:
-            value = custom[entry][0]
-        except KeyError:
-            continue
-        value = f"{PurePath(value).name}_t"
-        semodgenauto(
-        print(value)
-    exit()
     #nst_lst.append(semodgenauto(nst_lst[0], False, nst_lst[2], nst_lst[1]))
     # Utilize regular expressions to ensure libraries and directories are properly covered
     #for nst_lst in lst: nst_lst[0] = regex(nst_lst[0])
