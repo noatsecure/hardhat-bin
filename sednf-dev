@@ -78,7 +78,7 @@ def args():
         error("Argument 1: Name of the package.")
     try:
         # Argument 2 (Optional): Output directory
-        outdir = Path(argv[2]).expanduser()
+        outdir = Path(argv[2]).expanduser().resolve()
     except IndexError:
         # Default output directory
         outdir = Path('/usr/local/share/hardhat-selinux-local').expanduser() 
@@ -228,15 +228,83 @@ def add_label(lst, label):
     # Return $lst
     return(lst)
 
-def add_te(lst, te):
-    # Iterate through each key within the $te dictionary
-    for key in te:
-        # Iterate through each nested list within $lst
-        for nst_lst in lst:
-            # Check if the custom label within $nst_lst is the same as the current $key
-            if nst_lst[2] == key:
-                # Also add the SELinux policy module contents to $nst_lst
-                nst_lst.append(te[key])
+def create_label(lst):
+    labels = [nst_lst[-1] for nst_lst in lst]
+    try:
+        shebang = labels[0].split('\n')[0]
+    except IndexError:
+        error(f"Unable to obtain the shebang from the last index of the first entry (shown) from the $lst list:\n\n{lst[0]}\n")
+    # From each entry within $labels, split via newline and obtain the contents that should be in index 1. Index 0 = shebang, and index 2 = '' since it's a newline. Convert it to a set to remove duplicates and then sort
+    labels = sorted(set([entry.split('\n')[1] for entry in labels]))
+    # Join all entries via the newline to create a string
+    labels = '\n'.join(labels)
+    # Define the label shell script
+    labels = f"{shebang}\n{labels}"
+    # Return the $labels string
+    return(labels)
+
+def create_te(te):
+    try:
+        # Use the first entry within $te as a template SELinux policy module
+        template = list(te.values())[0]
+    except IndexError:
+        # If the $te dictionary is empty, then display an error message to user and exit
+        error("No SELinux policy modules were generated")
+    # Obtain the entry within $te for each $key that contains the attributes for the newly defined type for the specific custom label
+    te_attributes = [entry for key in te for entry in te[key] if entry.strip().startswith('attribute')]
+    try:
+        # Define the start of the line within the policy module that defines all of the attributes
+        start = search(r'(^ +|)attribute( |)', te_attributes[0]).group()
+    except AttributeError:
+        # If the regular expression search above failed, then display an error message to user and exit
+        error(f"Unable to utilize regular expressions to obtain the start of the 'attribute' entry for the following SELinux policy module contents:\n\t'{entry[0]}'")
+    # Define a set that will hold all attributes from all entries within $te 
+    attributes = set()
+    # Iterate through each of the attribute lines within $te_attributes
+    for entry in te_attributes:
+        # Using the $start string, split the current $entry into two parts: 0) the start of the line containing the 'attribute' string, 1) all of the attributes to define
+        entry = entry.split(start, 1)
+        # Split the contents section of $entry via the comma delimiter, remove extraneous whitespace and remove the ';' at the end of the line
+        contents = [x.replace(';', '').strip() for x in entry[1].split(', ')]
+        # Skipping the custom type in index 0, add all of the attributes for $entry to the $attributes set
+        [attributes.add(x) for x in set(contents[1:])]
+    # Sort the set of $attributes and join it via the comma delimiter used to previously split it. Add the $start string as well as the ending ';\n' string to complete the attribute line
+    attributes = f"{start}{', '.join(sorted(attributes))};\n"
+    # Re-create the $template list by adding all original entries to the output list except for the original 'attribute' line, where the $attributes string is now used instead
+    template = [attributes if entry.strip().startswith('attribute') else entry for entry in template]
+    # Obtain all entries within $te that defines the custom type (eg. 'type test_etc_t', 'test_lib_t') and sort them
+    te_types = sorted([entry for key in te for entry in te[key] if entry.strip().startswith('type')])
+    # Re-create the $template list again, where all custom types within $te_types are now put in place of the original type in $template
+    template = [''.join(te_types) if entry.strip().startswith('type') else entry for entry in template]
+    # Convert the $template into a string by joining all entries together
+    template = ''.join(template)
+    # Return $template
+    return(template)
+
+def write(label, te, outdir):
+    try:
+        # Obtain the module name from the $te string
+        name = search(r'[a-zA-Z-_]+_label', te).group()
+    except AttributeError:
+        # If the regular expression failed, then display an error message to user and exit
+        error(f"Unable to obtain module name from the following $te contents:\n\n{te}")
+    # Define the output directory that will contain the SELinux policy module .te file and the label.sh shell script
+    outdir = PurePath(outdir).joinpath(name)
+    try:
+        # Create the output directory if it does not already exist
+        Path(outdir).mkdir()
+    except FileExistsError:
+        # If the directory already exists, then do nothing
+        pass
+    # Define the full path to the SELinux policy module .te file
+    filename_te = PurePath(outdir).joinpath(f"{name}.te")
+    # Define the full path to the label.sh shell script
+    filename_label = PurePath(outdir).joinpath('label.sh')
+    # Write $te
+    with open(filename_te, 'w') as f: f.write(te)
+     # Write $label
+    with open(filename_label, 'w') as f: f.write(f"{label}\n")
+
 ############
 ### MAIN ###
 ############
@@ -257,9 +325,12 @@ def main(package, outdir):
     [label, te] = generate(package, lst)
     # Edit the labels within $label for each entry within $lst
     lst = add_label(lst, label)
-    # 
-    add_te(lst, te)
-    #for x in lst: print(x)
+    # Create the output $label file
+    label = create_label(lst)
+    # Create the output $te file
+    te = create_te(te)
+    # Write the SELinux policy module and label shell script
+    write(label, te, outdir)
 
 #############
 ### START ###
