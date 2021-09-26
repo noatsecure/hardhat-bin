@@ -182,6 +182,61 @@ def default_types(lst, custom):
     # Return $lst
     return(lst)
 
+def generate(package, lst):
+    # Create a name for the SELinux policy module
+    name = f"{PurePath(package).name}_label"
+    # Create a set containing all default types within $lst
+    defaults_uniq = set([(nst_lst[1], nst_lst[2]) for nst_lst in lst])
+    # Simply define an example file/directory for usage below when generating a SELinux policy module file and label shell script
+    example_target = lst[0][0]
+    # Define a dictionary to contain each unique entry within $defaults_uniq as the key, and the value being the SELinux policy module
+    te = {}
+    # Define a dictionary to contain each unique entry within $defaults_uniq as the key, and the value being the label shell script
+    label = {}
+    # Iterate through each tuple within $defaults_uniq
+    for tple in defaults_uniq:
+        # Obtain the SELinux policy module contents and label shell script contents for $example_target
+        [template_te, template_label] = semodgenauto(example_target, False, tple[1], name, tple[0])
+        # Add the SELinux policy module contents list to the $te dictionary, using the custom label as the key
+        te[tple[1]] = template_te
+        # Add the label shell script contents list to the $label dictionary, using the custom label as the key
+        label[tple[1]] = template_label 
+    # Return the dictionaries
+    return(label, te)
+
+def add_label(lst, label):
+    # Iterate through the keys within the $label dictionary in order to remove the $example_target from the label contents list
+    for key in label:
+        # Define the contents for the current $key
+        contents = label[key]
+        # Define the shebang ('#!/bin/sh')
+        shebang = contents[0]
+        # Define the contents as every entry within the $contents[1] list except for $example_target
+        contents = contents[1].split()[0:-1]
+        # Add the combined lists above as the new contents for $label[key]
+        label[key] = f"{shebang}{' '.join(contents)}"
+    # Utilize regular expressions to ensure libraries and directories are properly covered
+    for nst_lst in lst: nst_lst[0] = regex(nst_lst[0])
+    # Iterate through each key within the $label dictionary
+    for key in label:
+        # Iterate through each nested list within $lst
+        for nst_lst in lst:
+            # Check if the custom label within $nst_lst is the same as the current $key
+            if nst_lst[2] == key:
+                # If so, then add the proper label shell script contents to $nst_lst
+                nst_lst.append(f"{label[key]} \"{nst_lst[0]}\";\n")
+    # Return $lst
+    return(lst)
+
+def add_te(lst, te):
+    # Iterate through each key within the $te dictionary
+    for key in te:
+        # Iterate through each nested list within $lst
+        for nst_lst in lst:
+            # Check if the custom label within $nst_lst is the same as the current $key
+            if nst_lst[2] == key:
+                # Also add the SELinux policy module contents to $nst_lst
+                nst_lst.append(te[key])
 ############
 ### MAIN ###
 ############
@@ -198,10 +253,12 @@ def main(package, outdir):
     lst = [[entry, defaults[entry], key] for entry in lst for key in custom if entry.startswith(custom[key]) and defaults[entry]]
     # If the default types for any of the nested lists within $lst are a custom label (eg. 'openssl-libs_t' instead of 'lib_t'), then fix it
     lst = default_types(lst, custom)
-    # Generate the SELinux .te and label.sh shell scripts for each file and directory in $lst
-    #nst_lst.append(semodgenauto(nst_lst[0], False, nst_lst[2], nst_lst[1]))
-    # Utilize regular expressions to ensure libraries and directories are properly covered
-    #for nst_lst in lst: nst_lst[0] = regex(nst_lst[0])
+    # Generate the SELinux policy module and 
+    [label, te] = generate(package, lst)
+    # Edit the labels within $label for each entry within $lst
+    lst = add_label(lst, label)
+    # 
+    add_te(lst, te)
     #for x in lst: print(x)
 
 #############
