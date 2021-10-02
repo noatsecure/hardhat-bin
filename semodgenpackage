@@ -33,11 +33,11 @@ contexts = seinfox.contexts
 #------------------#
 #-- SEMODGENAUTO --#
 #------------------#
-# Load the `semodgenauto` python script
-semodgenauto = custom_module(PurePath(Path(argv[0]).resolve().parent).joinpath('semodgenauto').as_posix())
+# Load the `semodgentarget` python script
+semodgentarget = custom_module(PurePath(Path(argv[0]).resolve().parent).joinpath('semodgentarget').as_posix())
 
-# Define the main function as $semodgenauto
-semodgenauto = semodgenauto.main
+# Define the main function as $semodgentarget
+semodgentarget = semodgentarget.main
 
 #############
 ### USAGE ###
@@ -196,7 +196,7 @@ def generate(package, lst):
     # Iterate through each tuple within $defaults_uniq
     for tple in defaults_uniq:
         # Obtain the SELinux policy module contents and label shell script contents for $example_target
-        [template_te, template_label] = semodgenauto(example_target, False, tple[1], name, tple[0])
+        [template_te, template_label] = semodgentarget(example_target, False, tple[1], name, tple[0])
         # Add the SELinux policy module contents list to the $te dictionary, using the custom label as the key
         te[tple[1]] = template_te
         # Add the label shell script contents list to the $label dictionary, using the custom label as the key
