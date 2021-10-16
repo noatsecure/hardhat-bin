@@ -284,7 +284,7 @@ def create_te(te):
 def write(label, te, outdir):
     try:
         # Obtain the module name from the $te string
-        name = search(r'[a-zA-Z-_]+_label', te).group()
+        name = search(r'[a-zA-Z0-9-_]+_label', te).group()
     except AttributeError:
         # If the regular expression failed, then display an error message to user and exit
         error(f"Unable to obtain module name from the following $te contents:\n\n{te}")
