@@ -101,6 +101,8 @@ def description(context, get_context):
     stdout = cmd.stdout.decode().strip()
     # Obtain the description minus the first word, which simply states whether $context is a 'user', 'role' or 'type'
     desc = stdout.split(' ')[1:]
+    # Only keep entries that are not $context; this issue happens mostly with the 'usr_t' $context
+    desc = [entry for entry in desc if (not entry == f"{context},")]
     # Return the list containing the description for the $context
     return(desc)
 
