@@ -315,6 +315,12 @@ def main(package, outdir):
     stdout = rpm(package)
     # Clean the $stdout list to keep only valid entries
     lst = parse(stdout)
+    # Check if the $lst contains the specified string, meaning there are no files associated with the $package
+    if lst[0] == '(contains no files)':
+        # Display a warning message to user that the script is exiting
+        warn('There are no files associated with this package, exiting now.')
+        # Return here since there's nothing left to do
+        return
     # Define custom SELinux labels that will be used for each file and directory
     custom = custom_labels(package)
     # Obtain the default SELinux labels for each file and directory
