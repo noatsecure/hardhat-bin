@@ -110,7 +110,7 @@ def custom_labels(package):
     # Create a dictionary to hold the custom labels as keys and a tuple of their associated directories as the value
     labels = dict()
     # Use the package name to define the following labels
-    labels[f"{package}_bin_t"] = ('/bin', '/usr/bin')
+    labels[f"{package}_bin_t"] = ('/bin', '/usr/bin', '/usr/libexec')
     labels[f"{package}_etc_t"] = ('/etc')
     labels[f"{package}_sbin_t"] = ('/sbin', '/usr/sbin')
     # The custom label for the library directories are dependent on the package name. Normally the label for these directories will be: $name_libs_t, but for packages like 'openssl-libs' for example, the label looks redundant: 'openssl-libs_lib_t'. So to mediate this the associated directories are first defined
@@ -122,6 +122,10 @@ def custom_labels(package):
     else:
         # Otherwise, add the 'lib_t' string. Eg. the label for 'gzip' is 'gzip_lib_t'
         labels[f"{package}_lib_t"] = lib_labels
+    # Create a list of all directories within '/usr' that have already been defined above; '/usr/tmp' is added to this list manually
+    usr_blacklist = [Path(entry) for key in labels for entry in labels[key] if entry.startswith('/usr')] + [Path('/usr/tmp')]
+    # Create a list all of the directories in /usr that have no already been defined in $labels. This list is then converted into a tuple so all entries are under the label $package_usr_t
+    labels[f"{package}_usr_t"] = tuple([str(d) for d in Path('/usr').iterdir() if (not d in usr_blacklist)])
     # Return the $labels dictionary
     return(labels)
  
@@ -258,16 +262,14 @@ def create_te(te):
     except AttributeError:
         # If the regular expression search above failed, then display an error message to user and exit
         error(f"Unable to utilize regular expressions to obtain the start of the 'attribute' entry for the following SELinux policy module contents:\n\t'{entry[0]}'")
-    # Define a set that will hold all attributes from all entries within $te 
-    attributes = set()
     # Iterate through each of the attribute lines within $te_attributes
     for entry in te_attributes:
         # Using the $start string, split the current $entry into two parts: 0) the start of the line containing the 'attribute' string, 1) all of the attributes to define
         entry = entry.split(start, 1)
         # Split the contents section of $entry via the comma delimiter, remove extraneous whitespace and remove the ';' at the end of the line
         contents = [x.replace(';', '').strip() for x in entry[1].split(', ')]
-        # Skipping the custom type in index 0, add all of the attributes for $entry to the $attributes set
-        [attributes.add(x) for x in set(contents[1:])]
+        # Convert $contents into a set and define this as a new variable
+        attributes = set([entry for entry in contents])
     # Sort the set of $attributes and join it via the comma delimiter used to previously split it. Add the $start string as well as the ending ';\n' string to complete the attribute line
     attributes = f"{start}{', '.join(sorted(attributes))};\n"
     # Re-create the $template list by adding all original entries to the output list except for the original 'attribute' line, where the $attributes string is now used instead
