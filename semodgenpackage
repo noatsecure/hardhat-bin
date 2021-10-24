@@ -262,14 +262,18 @@ def create_te(te):
     except AttributeError:
         # If the regular expression search above failed, then display an error message to user and exit
         error(f"Unable to utilize regular expressions to obtain the start of the 'attribute' entry for the following SELinux policy module contents:\n\t'{entry[0]}'")
+    # Define the final set of attributes to use within the te file
+    attributes = set()
     # Iterate through each of the attribute lines within $te_attributes
     for entry in te_attributes:
         # Using the $start string, split the current $entry into two parts: 0) the start of the line containing the 'attribute' string, 1) all of the attributes to define
         entry = entry.split(start, 1)
         # Split the contents section of $entry via the comma delimiter, remove extraneous whitespace and remove the ';' at the end of the line
         contents = [x.replace(';', '').strip() for x in entry[1].split(', ')]
-        # Convert $contents into a set and define this as a new variable
-        attributes = set([entry for entry in contents])
+        # Add each entry within $contents to the $attributes set
+        [attributes.add(entry) for entry in contents]
+    # Convert the $attributes set into a list and sort alphabetically
+    attributes = sorted(attributes)
     # Sort the set of $attributes and join it via the comma delimiter used to previously split it. Add the $start string as well as the ending ';\n' string to complete the attribute line
     attributes = f"{start}{', '.join(sorted(attributes))};\n"
     # Re-create the $template list by adding all original entries to the output list except for the original 'attribute' line, where the $attributes string is now used instead
@@ -316,7 +320,7 @@ def main(package, outdir):
     # Clean the $stdout list to keep only valid entries
     lst = parse(stdout)
     # Check if the $lst contains the specified string, meaning there are no files associated with the $package
-    if lst[0] == '(contains no files)':
+    if (not lst) or (lst[0] == '(contains no files)'):
         # Display a warning message to user that the script is exiting
         warn('There are no files associated with this package, exiting now.')
         # Return here since there's nothing left to do
