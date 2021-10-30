@@ -5,9 +5,9 @@
 #############
 function usage() {
     name="$(basename ${0})";
-    printf "NAME\n\t${name} - shell script to compile and install SELinux module files\n\n";
+    printf "NAME\n\t${name} - shell script to compile the specified SELinux policy module\n\n";
     printf "SYNOPSIS\n\t${name} <module>.te\n\n";
-    printf "DESCRIPTION\n\t${name} is a shell script provided by the HardHat project to compile and install SELinux policy modules. The only argument this script takes is the path to the <module>.te file.\n\n";
+    printf "DESCRIPTION\n\t${name} is a shell script provided by the HardHat project to compile SELinux policy modules. The only argument this script takes is the path to the <module>.te file.\n\n";
     printf "EXAMPLES\n\t1. ${name} chromium-browser.te\n";
     printf "\n\n";
 };
@@ -16,7 +16,6 @@ function usage() {
 ### PROGRAMS ###
 ################
 checkmodule='/usr/bin/checkmodule';
-semodule='/usr/sbin/semodule';
 semodule_package='/usr/bin/semodule_package';
 
 #################
@@ -48,7 +47,6 @@ function rmfile() {
 ###############
 # Verify the specified packages are installed before continuing
 isinstalled "${checkmodule}";
-isinstalled "${semodule}";
 isinstalled "${semodule_package}";
 
 # Define the name of the '.mod' file that will be generated below by the `checkmodule` command 
@@ -80,8 +78,5 @@ isfile "${mod}";
 # Verify "$pp" exists
 isfile "${pp}";
 
-###############
-### INSTALL ###
-###############
-# Finally, install the '.pp' file generated above in order to load the SELinux policy
-"${semodule}" -i "${pp}";
+# Message to user
+echo "SUCCESS: Module was compiled: '${pp}'";
