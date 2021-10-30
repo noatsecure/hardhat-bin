@@ -1,0 +1,53 @@
+#!/bin/sh
+
+#############
+### USAGE ###
+#############
+function usage() {
+    name="$(basename ${0})";
+    printf "NAME\n\t${name} - SELinux module file to install\n\n";
+    printf "SYNOPSIS\n\t${name} <module>.pp\n\n";
+    printf "DESCRIPTION\n\t${name} is a shell script provided by the HardHat project to install the specified SELinux policy module. The only argument this script takes is the path to the <module>.pp file.\n\n";
+    printf "EXAMPLES\n\t1. ${name} chromium-browser.pp\n";
+    printf "\n\n";
+};
+
+################
+### PROGRAMS ###
+################
+semodule='/usr/sbin/semodule';
+
+#################
+### ARGUMENTS ###
+#################
+# Argument 1: SELinux '.pp' file
+pp="${1}";
+
+# Verify the '.pp' file has been passed by the user
+[[ -z "${pp}" ]] && usage && echo "ERROR: Argument 1: Specify the SELinux '.pp' file to install" && exit 1;
+
+# Ensure the file exists 
+[[ ! -f "${pp}" ]] && echo "ERROR: Invalid file: '${pp}'" && exit 1;
+
+#################
+### FUNCTIONS ###
+#################
+
+function isinstalled() {
+    [[ -z $(/usr/bin/command -v "${1}") ]] && echo "ERROR: Package '${1}' is not installed, run the command \`dnf provides ${1}\` and install the specified package before continuing" && exit 1;
+};
+
+###############
+### PREPARE ###
+###############
+# Verify the specified packages are installed before continuing
+isinstalled "${semodule}";
+
+###############
+### INSTALL ###
+###############
+# Install the '.pp' file in order to load the SELinux policy
+"${semodule}" -i "${pp}";
+
+# Message to user
+echo "SUCCESS: Module was installed: '${pp}'";
