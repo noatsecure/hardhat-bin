@@ -30,7 +30,7 @@ seinfox = seinfox.main
 ### DIRECTORIES ###
 ###################
 # Full path to the directory containing the template SELinux policy module and shell script for labelling
-template = Path('/usr/local/src/hardhat-selinux/templates/labels').expanduser()
+template = Path('/usr/local/src/hardhat-selinux-templates/labels').expanduser()
 
 ################
 ### BINARIES ###
