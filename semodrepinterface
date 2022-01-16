@@ -7,26 +7,42 @@ from sys import argv
 ### USAGE ###
 #############
 def usage():
-    print("")
+    name = Path(argv[0]).name
+    print(f"NAME\n\t{name} - python script that replaces the default interfaces with their HardHat equivalents for the specified SELinux /path/to/filename.te\n")
+    print(f"SYNOPSIS\n\t{name} /path/to/hardhat.if /path/to/filename.te [OPTIONS]\n")
+    print(f"DESCRIPTION\n\t{name} is a Python script provided by the HardHat project that replaces the default SELinux interfaces with their HardHat equivalents to ensure no unnecessary permissions are granted. By default, the new contents of the /path/to/filename.te (argument 2) that contain the HardHat replacements will be shown to stdout. Argument 3 can optionally be used to specify an output file, see the OPTIONS section below.\n")
+    print(f"OPTIONS\n\t/path/to/outfile.te\tThe output file to write the new contents of /path/to/filename.te specified in argument 2\n")
+    print(f"EXAMPLE\n\t1. {name} /usr/local/src/hardhat-selinux/contrib/hardhat.if ~/cat.te\n\n\t2. {name} /usr/local/src/hardhat-selinux/contrib/hardhat.if ~/cat.te /tmp/cat.new.te\n")
+    print("\n")
 
 #################
 ### FUNCTIONS ###
 #################
 def args():
+    # Check if the user has specified the help flag (any argument)
+    if any([True for arg in argv if arg == '-h']):
+        # If so, then display the usage information
+        usage()
+        # Exit
+        exit(0)
     try:
         # Argument 1: HardHat interface file
         hardhat_if = Path(argv[1]).resolve()
     except IndexError:
+        # Show the usage information
+        usage()
         # If the argument was not specified, then display an error message to stdout
-        print("ERROR: Argument 1: HardHat interface file to use.")
+        print('ERROR: Argument 1: Specify the path to the HardHat interface file.')
         # Exit with an error
         exit(1)
     try:
         # Argument 2: SELinux .te file whose default interfaces will be replaced with those within the HardHat interface file
         te = Path(argv[2]).resolve()
     except IndexError:
+        # Show the usage information
+        usage()
         # If argument 2 was not specified, then display an error message to stdout
-        print("ERROR: Argument 2: SELinux .te file whose default interfaces will be replaced with HardHat ones.")
+        print('ERROR: Argument 2: Specify the SELinux filename.te file whose default interfaces will be replaced with HardHat ones.')
         # Exit with an error
         exit(1)
     try:
