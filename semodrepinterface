@@ -124,7 +124,7 @@ def main(hardhat_if, te, outfile):
     # Replace all of the default interfaces within $te with their HardHat replacements whenever possible 
     new_contents = replace_defaults(te, interfaces)
     # Check if an $outfile has been specified
-    if outfile is False:
+    if outfile:
         # If so, then write the $new_contents to the $outfile
         write_contents(outfile, new_contents)
     else:
