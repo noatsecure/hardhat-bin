@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-from os.path import abspath,basename,expanduser,isfile
+from pathlib import Path
 from re import search
-from sys import argv,exit
+from sys import argv
 
 #############
 ### USAGE ###
 #############
 def usage():
     # Name of this script without any paths
-    name = basename(argv[0])
+    name = Path(argv[0]).name
     print(f"NAME\n\t{name} - python script to generate the 'require' section within a SELinux policy module file\n")
     print(f"SYNOPSIS\n\t{name} <module>.te\n")
     print(f"DESCRIPTION\n\t{name} is a Python script provided by the HardHat project to generate the 'require' section for SELinux policy modules. The only argument this script takes is the path to the <module>.te file.\n")
@@ -27,7 +27,7 @@ def args():
         exit(0)
     try:
         # Argument 1: Path to the SELinux module file
-        filename = abspath(expanduser(argv[1]))
+        filename = Path(argv[1]).resolve().expanduser()
     except IndexError:
         # Display the usage information
         usage()
@@ -39,7 +39,7 @@ def args():
     return(filename)
 
 def verify(filename):
-    if isfile(filename):
+    if Path(filename).is_file():
         # If the $filename is an existing file, return True
         return(True)
     else:
