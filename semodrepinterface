@@ -1,0 +1,125 @@
+#!/usr/bin/env python
+from pathlib import Path
+from re import compile,search
+from sys import argv
+
+#############
+### USAGE ###
+#############
+def usage():
+    print("")
+
+#################
+### FUNCTIONS ###
+#################
+def args():
+    try:
+        # Argument 1: HardHat interface file
+        hardhat_if = Path(argv[1]).resolve()
+    except IndexError:
+        # If the argument was not specified, then display an error message to stdout
+        print("ERROR: Argument 1: HardHat interface file to use.")
+        # Exit with an error
+        exit(1)
+    try:
+        # Argument 2: SELinux .te file whose default interfaces will be replaced with those within the HardHat interface file
+        te = Path(argv[2]).resolve()
+    except IndexError:
+        # If argument 2 was not specified, then display an error message to stdout
+        print("ERROR: Argument 2: SELinux .te file whose default interfaces will be replaced with HardHat ones.")
+        # Exit with an error
+        exit(1)
+    try:
+        # Argument 3 (OPTIONAL): New SELinux .te file to write once the default interfaces are replaced
+        outfile = Path(argv[3]).resolve()
+    except IndexError:
+        outfile = False
+    # Return the files
+    return(hardhat_if, te, outfile)
+
+def is_file(filename):
+    # Check if $filename is a valid file, and if so, then return True
+    if Path(filename).is_file(): return(True)
+    # Otherwise, display an error message to stdout
+    print(f"ERROR: Invalid file: '{filename}'")
+    # Exit with an error
+    exit(1)
+
+def hardhat_interfaces(hardhat_if):
+    # Open the HardHat interfaces file and obtain its full contents
+    with open(hardhat_if, 'r') as f: contents = f.readlines()
+    # Only keep the lines that define the interface names
+    contents = [line.strip() for line in contents if line.strip().startswith('interface(`')]
+    # Define the output set containing all HardHat interface names
+    interfaces = set()
+    # Define the regular expression that will be used to only obtain the name of each interface
+    exp = compile('hardhat_[\w]+')
+    # Iterate through each entry within the $contents list
+    for entry in contents:
+        try:
+            # Obtain the HardHat interface name
+            name = search(exp, entry).group()
+        except AttributeError:
+            # If the regular expression $exp did not match anything for the current $entry, then display the $entry to stdout
+            print(f"WARN: The regular expression '{exp}' did not match anything in the current entry: '{entry}'")
+            # Continue to the next $entry within $contents
+            continue
+        # If the $name was defined, then add it to the output $interfaces set. Here, we remove the prefix so $interfaces will be a list of normal interfaces. This makes it easier to search later on
+        interfaces.add(name.replace('hardhat_', '').strip())
+    # Return the set of all HardHat interface names
+    return(interfaces)
+
+def replace_defaults(te, interfaces):
+    # Obtain the full contents of the $te file
+    with open(te, 'r') as f: contents = f.readlines()
+    # Define the new $contents list
+    new_contents = []
+    # Iterate through each $line in the $contents list
+    for line in contents:
+        # Define $curr as the current line minus any extraneous whitespace
+        curr = line.strip()
+        # If $curr starts with one of the interfaces within the $interfaces set, then replace the default interface with the custom HardHat one
+        replacement = [line.replace(inter, f"hardhat_{inter}") for inter in interfaces if curr.startswith(inter)]
+        # Check if $replacement is empty
+        if not replacement:
+            # If so, then the current $line is added to the $new_contents list
+            new_contents.append(line)
+            # Continue to the next $line
+            continue
+        # Add the $replacement list (which should contain only the line that was replaced) to the $new_contents list.
+        new_contents = new_contents + replacement
+    # Return the $new_contents list, which will contain the replaced interfaces
+    return(new_contents)
+
+def write_contents(outfile, new_contents):
+    # Open the $outfile and write the $new_contents to it
+    with open(outfile, 'w') as f: [f.write(line) for line in new_contents]
+
+############
+### MAIN ###
+############
+def main(hardhat_if, te, outfile):
+    # Verify the HardHat interfaces file is valid
+    is_file(hardhat_if)
+    # Verify the SELinux policy file is valid
+    is_file(te)
+    # Obtain a set of all interface names defined within the $hardhat_if file
+    interfaces = hardhat_interfaces(hardhat_if)
+    # Replace all of the default interfaces within $te with their HardHat replacements whenever possible 
+    new_contents = replace_defaults(te, interfaces)
+    # Check if an $outfile has been specified
+    if outfile is False:
+        # If so, then write the $new_contents to the $outfile
+        write_contents(outfile, new_contents)
+    else:
+        # Otherwise, display the $new_contents to stdout 
+        print(''.join(new_contents))
+
+#############
+### START ###
+#############
+if __name__ == '__main__':
+    # Obtain user-defined arguments
+    [hardhat_if, te, outfile] = args()
+    # Start the main function
+    main(hardhat_if, te, outfile)
