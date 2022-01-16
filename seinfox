@@ -2,7 +2,7 @@
 from pathlib import Path
 from selinux import lgetfilecon
 from subprocess import run
-from sys import argv,exit
+from sys import argv
 
 ################
 ### BINARIES ###
