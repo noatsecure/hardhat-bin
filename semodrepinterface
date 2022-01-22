@@ -95,7 +95,7 @@ def replace_defaults(te, interfaces):
         # Define $curr as the current line minus any extraneous whitespace
         curr = line.strip()
         # If $curr starts with one of the interfaces within the $interfaces set, then replace the default interface with the custom HardHat one
-        replacement = [line.replace(inter, f"hardhat_{inter}") for inter in interfaces if curr.startswith(inter)]
+        replacement = [line.replace(inter, f"hardhat_{inter}") for inter in interfaces if curr.startswith(f"{inter}(")]
         # Check if $replacement is empty
         if not replacement:
             # If so, then the current $line is added to the $new_contents list
