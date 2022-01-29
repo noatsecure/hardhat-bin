@@ -71,8 +71,8 @@ def show(filename, line):
     with open(filename, 'r') as f: contents = f.readlines()
     # Define the $contents as starting with the $line
     contents = contents[line:]
-    # If the user's query is a definition, then only show the definition line
-    if contents[0].strip().startswith('define'):
+    # If the user's query is a definition AND the definition does _not_ end with a tick, then only show the definition line
+    if contents[0].strip().startswith('define') and (not contents[0].strip().endswith('`')):
         # Display the definition
         print(contents[0])
         # Return here since there's nothing left to do
